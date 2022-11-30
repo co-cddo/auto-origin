@@ -1,0 +1,35 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+runcmd:
+- yum install -y amazon-efs-utils
+- apt-get -y install amazon-efs-utils
+- yum install -y nfs-utils
+- apt-get -y install nfs-common
+- file_system_id_1=fs-05b8c59c8917ace63
+- efs_mount_point_1=/etc/nginx
+- file_system_id_2=fs-0c51f83e45d12a0ea
+- efs_mount_point_2=/etc/letsencrypt
+- mkdir -p "${efs_mount_point_1}"
+- test -f "/sbin/mount.efs" && printf "\n${file_system_id_1}:/ ${efs_mount_point_1} efs tls,_netdev\n" >> /etc/fstab || printf "\n${file_system_id_1}.efs.eu-west-2.amazonaws.com:/ ${efs_mount_point_1} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0\n" >> /etc/fstab
+- mkdir -p "${efs_mount_point_2}"
+- test -f "/sbin/mount.efs" && printf "\n${file_system_id_2}:/ ${efs_mount_point_2} efs tls,_netdev\n" >> /etc/fstab || printf "\n${file_system_id_2}.efs.eu-west-2.amazonaws.com:/ ${efs_mount_point_2} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0\n" >> /etc/fstab
+- test -f "/sbin/mount.efs" && grep -ozP 'client-info]\nsource' '/etc/amazon/efs/efs-utils.conf'; if [[ $? == 1 ]]; then printf "\n[client-info]\nsource=liw\n" >> /etc/amazon/efs/efs-utils.conf; fi;
+- retryCnt=15; waitTime=30; while true; do mount -a -t efs,nfs4 defaults; if [ $? = 0 ] || [ $retryCnt -lt 1 ]; then echo File system mounted successfully; break; fi; echo File system not available, retrying to mount.; ((retryCnt--)); sleep $waitTime; done;
+- snap install core
+- snap refresh core
+- snap install --classic certbot
+- ln -s /snap/bin/certbot /usr/bin/certbot
+- DEBIAN_FRONTEND=noninteractive apt-get -yq install nginx python3-pip git
+- mkdir -p /var/www/application
+- printf "[Unit]\nDescription=gunicorn daemon\nAfter=network.target\n\n[Service]\nUser=www-data\nGroup=www-data\nWorkingDirectory=/var/www/application/\n\nExecStart=/usr/bin/gunicorn --access-logfile - --workers 3 --bind unix:/var/www/application/gunicorn.sock wsgi:app\n\n[Install]\nWantedBy=multi-user.target\n" >> /etc/systemd/system/gunicorn.service
+- pip3 install gunicorn
+- git clone https://github.com/co-cddo/auto-origin /var/auto-origin
+- cp -R /var/auto-origin/ /var/www/application/
+- chown -R www-data:www-data /var/www/application/
+- printf "www-data ALL=(ALL) NOPASSWD:/usr/bin/certbot\n" > /etc/sudoers.d/20-certbot
+- printf "www-data ALL=(ALL) NOPASSWD:/usr/sbin/nginx\n" >> /etc/sudoers.d/20-certbot
+- systemctl enable gunicorn
+- systemctl enable nginx
+- systemctl start gunicorn
+- systemctl start nginx

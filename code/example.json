@@ -1,0 +1,46 @@
+{
+    "version": "2.0",
+    "routeKey": "$default",
+    "rawPath": "mta-sts.txt",
+    "rawQueryString": "timestamp=1669713740",
+    "cookies": [],
+    "headers": {
+        "true-host": "3601_security__gov__uk.auto.mta-sts.nonprod-service.security.gov.uk",
+        "x-amzn-tls-version": "TLSv1.2",
+        "x-forwarded-proto": "https",
+        "true-client-ip": "2a00:23c8:89a2:5420:9c65:ff76:61de:b0e0",
+        "x-forwarded-port": "443",
+        "x-forwarded-for": "2a00:23c8:89a2:5420:9c65:ff76:61de:b0e0",
+        "via": "3.0 a1a4fa2aa1a6ec4964511a9d2ab566d4.cloudfront.net (CloudFront)",
+        "x-amzn-tls-cipher-suite": "ECDHE-RSA-AES128-GCM-SHA256",
+        "x-amzn-trace-id": "Root=1-6385cf4c-abcdabcdabcdabcdabcdabcd",
+        "cloudfront-viewer-country-name": "United Kingdom",
+        "host": "abcdabcdabcdabcdabcdabcdabcdabcd.lambda-url.eu-west-2.on.aws",
+        "x-cloudfront": "40f0d3a4-ad93-48cd-a5e9-2f14e429a326",
+        "true-user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36",
+        "x-amz-cf-id": "ABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDABCDX8-OfQ==",
+        "user-agent": "Amazon CloudFront"
+    },
+    "queryStringParameters": {
+        "timestamp": "1669713740"
+    },
+    "requestContext": {
+        "accountId": "anonymous",
+        "apiId": "abcdabcdabcdabcdabcdabcdabcdabcd",
+        "domainName": "abcdabcdabcdabcdabcdabcdabcdabcd.lambda-url.eu-west-2.on.aws",
+        "domainPrefix": "abcdabcdabcdabcdabcdabcdabcdabcd",
+        "http": {
+            "method": "GET",
+            "path": "",
+            "protocol": "HTTP/1.1",
+            "sourceIp": "1.1.1.1",
+            "userAgent": "Amazon CloudFront"
+        },
+        "requestId": "d4da7401-e478-419e-848c-75f78726d92a",
+        "routeKey": "$default",
+        "stage": "$default",
+        "time": "29/Nov/2022:09:22:20 +0000",
+        "timeEpoch": 1669713740866
+    },
+    "isBase64Encoded": false
+}
