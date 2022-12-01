@@ -1,5 +1,6 @@
 import json
 import re
+import time
 
 from threading import Thread
 
@@ -16,9 +17,11 @@ def get_mx_records(hostname: str) -> list:
     global _mx_cache
 
     if hostname not in _mx_cache:
-        _mx_cache[hostname] = {"hostname": hostname}
+        _mx_cache[hostname] = {"hostname": hostname, "time": int(time.time())}
 
-    if "list" not in _mx_cache[hostname]:
+    if "list" not in _mx_cache[hostname] or _mx_cache[hostname]["time"] < (
+        int(time.time()) - 300
+    ):
         raw_mx_records = get_mxs(hostname)
         raw_mx_records.sort()
 
@@ -72,9 +75,15 @@ def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
         _mta_sts = f"_mta-sts.{hostname}"
 
     if "hostname" in _mx_cache:
-        _mx_cache[hostname].update({"_mta-sts": _mta_sts, "hostname": hostname})
+        _mx_cache[hostname].update(
+            {"_mta-sts": _mta_sts, "hostname": hostname, "time": int(time.time())}
+        )
     else:
-        _mx_cache[hostname] = {"_mta-sts": _mta_sts, "hostname": hostname}
+        _mx_cache[hostname] = {
+            "_mta-sts": _mta_sts,
+            "hostname": hostname,
+            "time": int(time.time()),
+        }
 
     hostname = _mta_sts[9:]
 
@@ -100,7 +109,7 @@ def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
                     mode = "none"
                 _mx_cache[hostname].update(
                     {
-                        "mode": get_mode(hostname, timeout),
+                        "mode": get_mode(hostname, mode, timeout),
                         "maxage": parsed.group("maxage"),
                         "mx_records": mx_records,
                         "raw": txt,
@@ -110,17 +119,21 @@ def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
     return _mx_cache[hostname]
 
 
-def get_mode(hostname: str, timeout: int = 2) -> list:
+def get_mode(hostname: str, default: str = "none", timeout: int = 2) -> list:
     global _mx_cache
 
     if (
-        "tls_fetched" not in _mx_cache[hostname]
-        or not _mx_cache[hostname]["tls_fetched"]
+        (
+            "tls_fetched" not in _mx_cache[hostname]
+            or not _mx_cache[hostname]["tls_fetched"]
+        )
+        and "mode" in _mx_cache[hostname]
+        and _mx_cache[hostname]["mode"] == "auto"
     ):
         _mx_cache[hostname]["tls_fetched"] = True
 
         if len(_mx_cache[hostname]["list"]) == 0:
-            _mx_cache[hostname]["mode"] = "none"
+            _mx_cache[hostname]["mode"] = default
         else:
             records_support_tls = []
             try:
@@ -144,6 +157,7 @@ def get_mode(hostname: str, timeout: int = 2) -> list:
             else:
                 _mx_cache[hostname]["mode"] = "testing"
 
+    _mx_cache[hostname]["mode"] = _mx_cache[hostname].get("mode", default)
     return _mx_cache[hostname]["mode"]
 
 
