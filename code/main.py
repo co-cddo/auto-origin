@@ -29,7 +29,10 @@ def root():
 
     vh = get_valid_host()
     if vh is not None:
-        cce = create_certbot_entry(vh)
+        try:
+            cce = create_certbot_entry(vh)
+        except Exception as e:
+            print("mtaststxt:e:", e)
         if vh.startswith("mta-sts."):
             redirect_url = "/.well-known/mta-sts.txt"
 
