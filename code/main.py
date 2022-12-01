@@ -25,13 +25,17 @@ def get_valid_host() -> str:
 
 @app.route("/")
 def root():
+    redirect_url = DEFAULT_REDIRECT_URL
+
     vh = get_valid_host()
     if vh is not None:
         cce = create_certbot_entry(vh)
+        if vh.startswith("mta-sts."):
+            redirect_url = "/.well-known/mta-sts.txt"
 
     # get from redirect DNS TXT record?
     # get txt records, if record starts "_ao=", check if redirect URL is in allowed list, use that?
-    return redirect(DEFAULT_REDIRECT_URL)
+    return redirect(redirect_url)
 
 
 @app.route("/tls-status")
@@ -49,8 +53,13 @@ def mtaststxt():
     cache = 60
     txt = "# Invalid Domain\r\n"
     vh = get_valid_host()
+
     if vh is not None:
-        cce = create_certbot_entry(vh)
+        try:
+            cce = create_certbot_entry(vh)
+        except Exception as e:
+            print("mtaststxt:e:", e)
+
         cache, txt = get_txt_file(vh)
 
     resp = make_response(txt, (200 if txt.startswith("version:") else 404))

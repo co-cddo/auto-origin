@@ -67,7 +67,7 @@ def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
     if hostname.startswith("_mta-sts."):
         _mta_sts = hostname
     elif hostname.startswith("mta-sts."):
-        _mta_sts = "_{hostname}"
+        _mta_sts = f"_{hostname}"
     else:
         _mta_sts = f"_mta-sts.{hostname}"
 
@@ -76,8 +76,10 @@ def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
     else:
         _mx_cache[hostname] = {"_mta-sts": _mta_sts, "hostname": hostname}
 
+    hostname = _mta_sts[9:]
+
     if _mta_sts is not None:
-        mx_records = get_mx_records(_mta_sts[9:])
+        mx_records = get_mx_records(hostname)
 
         regex_discovery = (
             r"v=stsv1;\s*id=['\"]?[0-9]*?mo(?P<mode>a|e|t|n)(?:dma(?P<maxage>[0-9]+))?"
