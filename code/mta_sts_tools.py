@@ -3,7 +3,7 @@ import re
 
 from threading import Thread
 
-from dns_tools import get_cnames, get_mxs
+from dns_tools import get_txts, get_mxs
 from socket_checker import smtp_tls_check
 
 
@@ -14,7 +14,11 @@ _mx_cache = {}
 
 def get_mx_records(hostname: str) -> list:
     global _mx_cache
+
     if hostname not in _mx_cache:
+        _mx_cache[hostname] = {"hostname": hostname}
+
+    if "list" not in _mx_cache[hostname]:
         raw_mx_records = get_mxs(hostname)
         raw_mx_records.sort()
 
@@ -27,14 +31,12 @@ def get_mx_records(hostname: str) -> list:
         except:
             san_mxs = []
 
-        _mx_cache[hostname] = {
-            "list": san_mxs,
-            "raw": raw_mx_records,
-            "mode": "none",
-            "tls_fetched": False,
-        }
-
-    print(json.dumps(_mx_cache[hostname], default=str))
+        _mx_cache[hostname].update(
+            {
+                "list": san_mxs,
+                "raw": raw_mx_records,
+            }
+        )
     return _mx_cache[hostname]["list"]
 
 
@@ -50,57 +52,69 @@ def host_valid(hostname: str) -> bool:
     return False
 
 
-def get_mta_sts_cname(hostname: str = None) -> str:
+def get_mta_sts_txt(hostname: str = None, timeout: int = 2) -> dict:
+    global _mx_cache
+    _mta_sts = None
+
     if not hostname or type(hostname) != str:
-        return False
+        return {}
+
     hostname = hostname.lower().strip().strip(".")
 
-    cnames = get_cnames(hostname)
-    if len(cnames) == 1 and re.search(
-        r"\.mta-sts\.(?:nonprod-)service\.security\.gov\.uk", cnames[0]
-    ):
-        return cnames[0].lower().strip().strip(".")
-    return None
+    if not host_valid(hostname):
+        return {}
 
+    if hostname.startswith("_mta-sts."):
+        _mta_sts = hostname
+    elif hostname.startswith("mta-sts."):
+        _mta_sts = "_{hostname}"
+    else:
+        _mta_sts = f"_mta-sts.{hostname}"
 
-def parse_mta_sts(hostname: str, check_suffix: bool = True) -> dict:
-    res = {"valid": False}
-    if not hostname or type(hostname) != str:
-        return res
-    hostname = hostname.lower().strip()
+    if "hostname" in _mx_cache:
+        _mx_cache[hostname].update({"_mta-sts": _mta_sts, "hostname": hostname})
+    else:
+        _mx_cache[hostname] = {"_mta-sts": _mta_sts, "hostname": hostname}
 
-    if check_suffix:
-        if not host_valid(hostname):
-            return res
+    if _mta_sts is not None:
+        mx_records = get_mx_records(_mta_sts[9:])
 
-    split_hostname = hostname.split(".")
-    if not check_suffix or len(split_hostname) == 7:
-        if split_hostname[1] in ["auto", "testing", "enforce", "none"]:
-            res["mode"] = split_hostname[1]
-            res["max_age"] = None
+        regex_discovery = (
+            r"v=stsv1;\s*id=['\"]?[0-9]*?mo(?P<mode>a|e|t|n)(?:dma(?P<maxage>[0-9]+))?"
+        )
+        txts = get_txts(_mta_sts)
+        if len(txts) == 1:
+            txt = txts[0].lower()
+            parsed = re.search(regex_discovery, txt)
+            if parsed:
+                mode = parsed.group("mode")
+                if mode == "a":
+                    mode = "auto"
+                elif mode == "e":
+                    mode = "enforce"
+                elif mode == "t":
+                    mode = "testing"
+                else:
+                    mode = "none"
+                _mx_cache[hostname].update(
+                    {
+                        "mode": get_mode(hostname, timeout),
+                        "maxage": parsed.group("maxage"),
+                        "mx_records": mx_records,
+                        "raw": txt,
+                    }
+                )
 
-            raw_domain = None
-            if re.search(r"\d+_[a-z]", split_hostname[0]):
-                split_key = split_hostname[0].split("_", 1)
-                res["max_age"] = int(split_key[0])
-                raw_domain = split_key[1]
-            else:
-                raw_domain = split_hostname[0]
-
-            if raw_domain and "__" in raw_domain:
-                raw_domain = raw_domain.replace("__", ".")
-                if host_valid(raw_domain):
-                    res["domain"] = raw_domain
-                    res["valid"] = True
-                    res["mx_records"] = get_mx_records(raw_domain)
-
-    return res
+    return _mx_cache[hostname]
 
 
 def get_mode(hostname: str, timeout: int = 2) -> list:
     global _mx_cache
 
-    if not _mx_cache[hostname]["tls_fetched"]:
+    if (
+        "tls_fetched" not in _mx_cache[hostname]
+        or not _mx_cache[hostname]["tls_fetched"]
+    ):
         _mx_cache[hostname]["tls_fetched"] = True
 
         if len(_mx_cache[hostname]["list"]) == 0:
@@ -129,3 +143,57 @@ def get_mode(hostname: str, timeout: int = 2) -> list:
                 _mx_cache[hostname]["mode"] = "testing"
 
     return _mx_cache[hostname]["mode"]
+
+
+def get_txt_file(hostname: str = None) -> tuple:
+    txt = "# Not configured\r\n"
+
+    cache = 60
+
+    parsed_hostname = get_mta_sts_txt(hostname)
+
+    if "hostname" in parsed_hostname:
+        txt += f"""\r\n# Didn't find a valid TXT record at "_mta-sts.{parsed_hostname['hostname']}"
+# Set your "_mta-sts" record in the following format (using only alphanumeric characters)
+# [date]mo(a|n|t|e)dma[max_age_seconds]
+#
+# where:
+#    - [date] is optional
+#    - mo is required and equals mode:
+#        - a: auto (tries to test MX records and sets mode)
+#        - e: enforce
+#        - t: testing
+#        - n: none (will default to this if no MX records found)
+#    - dma[max_age_seconds] is optional
+#
+# Examples:
+#  - "20221201motdma86401" (testing with a max-age of one day and one second)
+#  - "moa" (auto mode using max-age defaults)
+#  - "20221201moedma3600" (enforce mode with max-age of one hour)
+#
+# Full DNS zone file example:
+# _mta-sts 60 TXT "v=STSv1; id=20221201moa"
+"""
+
+        if "mode" in parsed_hostname:
+            if parsed_hostname["maxage"] is None:
+                parsed_hostname["maxage"] = (
+                    1209600 if parsed_hostname["mode"] == "enforce" else 86401
+                )
+
+            txt = "version: STSv1\r\n"
+
+            mx_records = (
+                parsed_hostname["mx_records"] if "mx_records" in parsed_hostname else []
+            )
+            if len(mx_records) > 0:
+                txt += f"mode: {parsed_hostname['mode']}\r\n"
+            else:
+                txt += f"mode: none\r\n"
+            for mx in mx_records:
+                txt += f"mx: {mx}\r\n"
+
+            cache = parsed_hostname["maxage"]
+            txt += f"max_age: {parsed_hostname['maxage']}\r\n"
+
+    return (cache, txt)

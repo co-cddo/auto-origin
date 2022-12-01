@@ -5,9 +5,10 @@ import subprocess
 from os.path import exists
 from time import sleep
 
-from dns_tools import get_cnames, get_as
+from dns_tools import get_cnames
+from generate_nginx_site import create_site
 
-nginx_conf = "/etc/nginx/sites-enabled/default"
+nginx_confs = "/etc/nginx/sites-enabled"
 ssl_cert_re = r"\s*ssl_certificate\s+/etc/letsencrypt/live/([^/]+)"
 
 valid_cname_endings = [
@@ -18,26 +19,11 @@ valid_cname_endings = [
 ]
 
 
-def sites_enabled() -> list:
-    sites = []
-
-    if exists(nginx_conf):
-        with open(nginx_conf, "r") as reader:
-            lines = [line.rstrip() for line in reader]
-        reader.close()
-
-        for line in lines:
-            match = re.match(ssl_cert_re, line)
-            if match:
-                sites.append(match.group(1))
-
-    return sites
-
-
 def check_for_certificate(host: str = None) -> bool:
     if host is None or type(host) != str:
         return False
-    return host in sites_enabled()
+
+    return exists(f"{nginx_confs}/{host}.conf")
 
 
 def check_for_cname(host: str = None) -> bool:
@@ -70,11 +56,26 @@ def create_certbot_entry(host: str = None, alt_checks: list = []) -> bool:
         if not alt_check:
             return False
 
-    ls_output = subprocess.Popen(["sudo", "certbot", "--nginx", "-n", "-d", host])
+    ls_output = subprocess.Popen(
+        [
+            "sudo",
+            "certbot",
+            "certonly",
+            "--webroot",
+            "--webroot-path",
+            "/var/www/certbot",
+            "-n",
+            "-d",
+            host,
+        ]
+    )
     ls_output.communicate()
-
     print("ls_output:", ls_output)
-
     sleep(1)
+
+    create_site(host)
+    sleep(1)
+
+    subprocess.Popen(["/usr/sbin/nginx", "-s", "reload"])
 
     return check_for_certificate(host)
