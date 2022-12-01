@@ -73,9 +73,9 @@ def create_certbot_entry(host: str = None, alt_checks: list = []) -> bool:
     print("ls_output:", ls_output)
     sleep(1)
 
-    create_site(host)
-    sleep(1)
-
-    subprocess.Popen(["/usr/sbin/nginx", "-s", "reload"])
+    resp = create_site(host)
+    if resp["new"]:
+        sleep(1)
+        subprocess.Popen(["sudo", "/usr/sbin/nginx", "-s", "reload"])
 
     return check_for_certificate(host)

@@ -9,12 +9,13 @@ domain_key = "{DOMAIN}"
 
 
 def create_site(domain: str = None) -> bool:
+    new_site = False
     if domain is None or type(domain) != str:
-        return False
+        return {"exists": False, "new": new_site}
 
     domain = domain.lower().strip().strip(".")
     if not domain:
-        return False
+        return {"exists": False, "new": new_site}
 
     destination_conf = f"{destination}/{domain}.conf"
     res = False
@@ -32,9 +33,10 @@ def create_site(domain: str = None) -> bool:
 
         if exists(destination_conf):
             res = True
+            new_site = True
 
     if res:
         destination_enabled_conf = f"{destination_enabled}/{domain}.conf"
         os.symlink(destination_conf, destination_enabled_conf)
 
-    return res
+    return {"exists": res, "new": new_site}
